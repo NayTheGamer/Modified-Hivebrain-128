@@ -1,0 +1,4 @@
+Note: The Object definitions are unfinished & SonED2 compatibility is not loadable
+at the minute.
+
+From, NaylenFresh 27/11/24  21:35
