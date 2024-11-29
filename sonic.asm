@@ -3083,7 +3083,7 @@ Title_EnterCheat:			; XREF: Title_ChkRegion
 
 Title_PlayRing:
 		move.b	#1,(a0,d1.w)	; activate cheat
-		move.b	#$B5,d0		; play ring sound when code is entered
+		move.b	#sfx_Ring,d0		; play ring sound when code is entered
 		jsr	PlaySound_Special
 		bra.s	Title_CountC
 ; ===========================================================================
@@ -4752,7 +4752,7 @@ loc_47D4:
 		move.w	($FFFFFE20).w,d0
 		mulu.w	#10,d0		; multiply rings by 10
 		move.w	d0,($FFFFF7D4).w ; set rings bonus
-		move.w	#$8E,d0
+		move.w	#bgm_GotThrough,d0
 		jsr	(PlaySound_Special).l ;	play end-of-level music
 		lea	($FFFFD000).w,a1
 		moveq	#0,d0
@@ -4775,7 +4775,7 @@ SS_NormalExit:
 		beq.s	SS_NormalExit
 		tst.l	($FFFFF680).w
 		bne.s	SS_NormalExit
-		move.w	#$CA,d0
+		move.w	#sfx_EnterSS,d0
 		jsr	PlaySound_Special ; play special stage exit sound
 		bsr.w	Pal_MakeFlash
 		rts	
@@ -7988,7 +7988,7 @@ loc_6EB0:
 		move.w	#$280,$C(a1)
 
 loc_6ED0:
-		move.w	#$8C,d0
+		move.w	#bgm_Boss,d0
 		jsr	PlaySound	; play boss music
 		move.b	#1,($FFFFF7AA).w ; lock	screen
 		addq.b	#2,($FFFFF742).w
