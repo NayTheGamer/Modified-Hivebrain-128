@@ -34585,7 +34585,7 @@ KillSonic:
 		move.w	$C(a0),$38(a0)
 		move.b	#$18,$1C(a0)
 		bset	#7,2(a0)
-		move.w	#$A3,d0		; play normal death sound
+		move.w	#sfx_Death,d0		; play normal death sound
 		cmpi.b	#$36,(a2)	; check	if you were killed by spikes
 		bne.s	Kill_Sound
 		move.w	#sfx_HitSpikes,d0		; play spikes death sound
