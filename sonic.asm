@@ -2873,7 +2873,7 @@ Sega_WaitPallet:
 		jsr	PlaySound_Special ; play "SEGA"	sound
 		move.b	#$14,($FFFFF62A).w
 		bsr.w	DelayProgram
-		move.w	#$8E,($FFFFF614).w
+		move.w	#$8E,($FFFFF614).w			
 
 Sega_WaitEnd:
 		move.b	#2,($FFFFF62A).w
@@ -2881,7 +2881,7 @@ Sega_WaitEnd:
 		tst.w	($FFFFF614).w
 		beq.s	Sega_GotoTitle
 		andi.b	#$80,($FFFFF605).w ; is	Start button pressed?
-		beq.s	Sega_WaitEnd	; if not, branch
+		beq.s	Sega_WaitEnd	; if not, branc		
 
 Sega_GotoTitle:
 		move.b	#4,($FFFFF600).w ; go to title screen
