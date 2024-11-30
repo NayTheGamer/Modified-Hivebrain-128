@@ -34547,7 +34547,7 @@ Hurt_ChkSpikes:
 		move.w	#0,$14(a0)
 		move.b	#$1A,$1C(a0)
 		move.w	#$78,$30(a0)
-		move.w	#$A3,d0		; load normal damage sound
+		move.w	#sfx_Death,d0		; load normal damage sound
 		cmpi.b	#$36,(a2)	; was damage caused by spikes?
 		bne.s	Hurt_Sound	; if not, branch
 		cmpi.b	#$16,(a2)	; was damage caused by LZ harpoon?
