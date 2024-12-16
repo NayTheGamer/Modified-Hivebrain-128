@@ -17,7 +17,8 @@
 	include "MacroSetup.asm"	
 	include "Macros.asm"
 	include "Ram-Additions.asm"		
-	include	"_includes-ASM/Debugger.asm"	
+	include "Sonic-2-Clone-Driver-v2/Definitions.asm"		
+	include	"_includes-ASM/Debugger.asm"
 	
 StartOfRom:
 Vectors:dc.l $FFFE00, EntryPoint, BusError, AddressError
@@ -206,7 +207,7 @@ GameClrRAM:
 		move.l	d7,(a6)+
 		dbf	d6,GameClrRAM	; fill RAM ($0000-$FDFF) with $0
 		bsr.w	VDPSetupGame
-		bsr.w	SoundDriverLoad
+		jsr	SoundDriverLoad
 		bsr.w	JoypadInit
 		move.b	#0,($FFFFF600).w ; set Game Mode to Sega Screen
 
@@ -262,7 +263,7 @@ Art_Text:	binclude	"_binary-files/artunc/menutext.bin"	; text used in level sele
 loc_B10:				; XREF: Vectors
 		movem.l	d0-a6,-(sp)
 		tst.b	($FFFFF62A).w
-		beq.s	loc_B88
+		beq.w	loc_B88
 		move.w	($C00004).l,d0
 		move.l	#$40000010,($C00004).l
 		move.l	($FFFFF616).w,($C00000).l
@@ -282,9 +283,9 @@ loc_B42:
 		jsr	off_B6E(pc,d0.w)
 
 loc_B5E:				; XREF: loc_B88
-		jsr	sub_71B4C
-
+		
 loc_B64:				; XREF: loc_D50
+		SMPS_UpdateSoundDriver
 		addq.l	#1,($FFFFFE0C).w
 		movem.l	(sp)+,d0-a6
 		rte	
@@ -763,7 +764,6 @@ loc_119E:				; XREF: PalToCRAM
 		clr.b	($FFFFF64F).w
 		movem.l	d0-a6,-(sp)
 		bsr.w	Demo_Time
-		jsr	sub_71B4C
 		movem.l	(sp)+,d0-a6
 		rte	
 ; End of function PalToCRAM
@@ -937,62 +937,6 @@ loc_134A:
 ; ||||||||||||||| S U B	R O U T	I N E |||||||||||||||||||||||||||||||||||||||
 
 
-SoundDriverLoad:			; XREF: GameClrRAM; TitleScreen
-		nop	
-		move.w	#$100,($A11100).l ; stop the Z80
-		move.w	#$100,($A11200).l ; reset the Z80
-		lea	(Kos_Z80).l,a0	; load sound driver
-		lea	($A00000).l,a1
-		bsr.w	KosDec		; decompress
-		move.w	#0,($A11200).l
-		nop	
-		nop	
-		nop	
-		nop	
-		move.w	#$100,($A11200).l ; reset the Z80
-		move.w	#0,($A11100).l	; start	the Z80
-		rts	
-; End of function SoundDriverLoad
-
-; ---------------------------------------------------------------------------
-; Subroutine to	play a sound or	music track
-; ---------------------------------------------------------------------------
-
-; ||||||||||||||| S U B	R O U T	I N E |||||||||||||||||||||||||||||||||||||||
-
-
-PlaySound:
-		move.b	d0,($FFFFF00A).w
-		rts	
-; End of function PlaySound
-
-; ---------------------------------------------------------------------------
-; Subroutine to	play a special sound/music (E0-E4)
-;
-; E0 - Fade out
-; E1 - Sega
-; E2 - Speed up
-; E3 - Normal speed
-; E4 - Stop
-; ---------------------------------------------------------------------------
-
-; ||||||||||||||| S U B	R O U T	I N E |||||||||||||||||||||||||||||||||||||||
-
-
-PlaySound_Special:
-		move.b	d0,($FFFFF00B).w
-		rts	
-; End of function PlaySound_Special
-
-; ===========================================================================
-; ---------------------------------------------------------------------------
-; Unused sound/music subroutine
-; ---------------------------------------------------------------------------
-
-PlaySound_Unk:
-		move.b	d0,($FFFFF00C).w
-		rts	
-
 ; ---------------------------------------------------------------------------
 ; Subroutine to	pause the game
 ; ---------------------------------------------------------------------------
@@ -1011,7 +955,7 @@ PauseGame:				; XREF: Level_MainLoop; et al
 
 loc_13BE:
 		move.w	#1,($FFFFF63A).w ; freeze time
-		move.b	#1,($FFFFF003).w ; pause music
+		SMPS_Pause ; pause music
 
 loc_13CA:
 		move.b	#$10,($FFFFF62A).w
@@ -1036,7 +980,7 @@ Pause_ChkStart:				; XREF: PauseGame
 		beq.s	loc_13CA	; if not, branch
 
 loc_1404:				; XREF: PauseGame
-		move.b	#$80,($FFFFF003).w
+		SMPS_Unpause
 
 Unpause:				; XREF: PauseGame
 		move.w	#0,($FFFFF63A).w ; unpause the game
@@ -1728,6 +1672,14 @@ locret_189A:
 
 ; ---------------------------------------------------------------------------
 ; Kosinski decompression algorithm
+; ---------------------------------------------------------------------------
+
+; ||||||||||||||| S U B	R O U T	I N E |||||||||||||||||||||||||||||||||||||||
+; ---------------------------------------------------------------------------
+; Subroutine to	play a music track
+
+; input:
+;	d0 = track to play
 ; ---------------------------------------------------------------------------
 
 ; ||||||||||||||| S U B	R O U T	I N E |||||||||||||||||||||||||||||||||||||||
@@ -2868,8 +2820,8 @@ Angle_Data:	binclude	"_misc/angles.bin"
 ; ---------------------------------------------------------------------------
 
 SegaScreen:				; XREF: GameModeArray
-		move.b	#$E4,d0
-		bsr.w	PlaySound_Special ; stop music
+		move.b	#bgm_Stop,d0
+		jsr	PlaySound_Special ; stop music
 		bsr.w	ClearPLC
 		bsr.w	Pal_FadeFrom
 		lea	($C00004).l,a6
@@ -2917,11 +2869,11 @@ Sega_WaitPallet:
 		bsr.w	PalCycle_Sega
 		bne.s	Sega_WaitPallet
 
-		move.b	#$E1,d0
-		bsr.w	PlaySound_Special ; play "SEGA"	sound
+		move.b	#sfx_Sega,d0
+		jsr	PlaySound_Special ; play "SEGA"	sound
 		move.b	#$14,($FFFFF62A).w
 		bsr.w	DelayProgram
-		move.w	#$1E,($FFFFF614).w
+		move.w	#$8E,($FFFFF614).w			
 
 Sega_WaitEnd:
 		move.b	#2,($FFFFF62A).w
@@ -2929,7 +2881,7 @@ Sega_WaitEnd:
 		tst.w	($FFFFF614).w
 		beq.s	Sega_GotoTitle
 		andi.b	#$80,($FFFFF605).w ; is	Start button pressed?
-		beq.s	Sega_WaitEnd	; if not, branch
+		beq.s	Sega_WaitEnd	; if not, branc		
 
 Sega_GotoTitle:
 		move.b	#4,($FFFFF600).w ; go to title screen
@@ -2941,12 +2893,12 @@ Sega_GotoTitle:
 ; ---------------------------------------------------------------------------
 
 TitleScreen:				; XREF: GameModeArray
-		move.b	#$E4,d0
-		bsr.w	PlaySound_Special ; stop music
+		move.b	#bgm_Stop,d0
+		jsr	PlaySound_Special ; stop music
 		bsr.w	ClearPLC
 		bsr.w	Pal_FadeFrom
 		move	#$2700,sr
-		bsr.w	SoundDriverLoad
+		jsr	SoundDriverLoad
 		lea	($C00004).l,a6
 		move.w	#$8004,(a6)
 		move.w	#$8230,(a6)
@@ -3052,8 +3004,8 @@ Title_LoadText:
 		bsr.w	NemDec
 		moveq	#1,d0		; load title screen pallet
 		bsr.w	PalLoad1
-		move.b	#$8A,d0		; play title screen music
-		bsr.w	PlaySound_Special
+		move.b	#bgm_Title,d0		; play title screen music
+		jsr	PlaySound_Special
 		move.b	#0,($FFFFFFFA).w ; disable debug mode
 		move.w	#$178,($FFFFF614).w ; run title	screen for $178	frames
 		lea	($FFFFD080).w,a1
@@ -3131,8 +3083,8 @@ Title_EnterCheat:			; XREF: Title_ChkRegion
 
 Title_PlayRing:
 		move.b	#1,(a0,d1.w)	; activate cheat
-		move.b	#$B5,d0		; play ring sound when code is entered
-		bsr.w	PlaySound_Special
+		move.b	#sfx_Ring,d0		; play ring sound when code is entered
+		jsr	PlaySound_Special
 		bra.s	Title_CountC
 ; ===========================================================================
 
@@ -3199,22 +3151,18 @@ LevelSelect:
 		cmpi.w	#$14,d0		; have you selected item $14 (sound test)?
 		bne.s	LevSel_Level_SS	; if not, go to	Level/SS subroutine
 		move.w	($FFFFFF84).w,d0
-		addi.w	#$80,d0
+;		addi.w	#$80,d0
 		tst.b	($FFFFFFE3).w	; is Japanese Credits cheat on?
 		beq.s	LevSel_NoCheat	; if not, branch
-		cmpi.w	#$9F,d0		; is sound $9F being played?
+		cmpi.w	#$1F,d0		; is sound $9F being played?
 		beq.s	LevSel_Ending	; if yes, branch
-		cmpi.w	#$9E,d0		; is sound $9E being played?
+		cmpi.w	#$1E,d0		; is sound $9E being played?
 		beq.s	LevSel_Credits	; if yes, branch
 
 LevSel_NoCheat:
-		cmpi.w	#$94,d0		; is sound $80-$94 being played?
-		bcs.s	LevSel_PlaySnd	; if yes, branch
-		cmpi.w	#$A0,d0		; is sound $95-$A0 being played?
-		bcs.s	LevelSelect	; if yes, branch
 
 LevSel_PlaySnd:
-		bsr.w	PlaySound_Special
+		jsr	PlaySound_Special
 		bra.s	LevelSelect
 ; ===========================================================================
 
@@ -3227,7 +3175,7 @@ LevSel_Ending:				; XREF: LevelSelect
 LevSel_Credits:				; XREF: LevelSelect
 		move.b	#$1C,($FFFFF600).w ; set screen	mode to	$1C (Credits)
 		move.b	#$91,d0
-		bsr.w	PlaySound_Special ; play credits music
+		jsr	PlaySound_Special ; play credits music
 		move.w	#0,($FFFFFFF4).w
 		rts	
 ; ===========================================================================
@@ -3265,7 +3213,7 @@ PlayLevel:				; XREF: ROM:00003246j ...
 		move.l	d0,($FFFFFE5C).w ; clear emeralds
 		move.b	d0,($FFFFFE18).w ; clear continues
 		move.b	#$E0,d0
-		bsr.w	PlaySound_Special ; fade out music
+		jsr	PlaySound_Special ; fade out music
 		rts	
 ; ===========================================================================
 ; ---------------------------------------------------------------------------
@@ -3314,7 +3262,7 @@ loc_33E4:				; XREF: Demo
 		tst.w	($FFFFF614).w
 		bne.w	loc_33B6
 		move.b	#$E0,d0
-		bsr.w	PlaySound_Special ; fade out music
+		jsr	PlaySound_Special ; fade out music
 		move.w	($FFFFFFF2).w,d0 ; load	demo number
 		andi.w	#7,d0
 		add.w	d0,d0
@@ -3398,8 +3346,9 @@ LevSel_SndTest:				; XREF: LevSelControls
 		btst	#2,d1		; is left pressed?
 		beq.s	LevSel_Right	; if not, branch
 		subq.w	#1,d0		; subtract 1 from sound	test
-		bcc.s	LevSel_Right
-		moveq	#$4F,d0		; if sound test	moves below 0, set to $4F
+		cmpi.w	#$50,d0
+		blo.s	LevSel_Refresh2
+		moveq	#0,d0		; if sound test	moves above $4F, set to	0
 
 LevSel_Right:
 		btst	#3,d1		; is right pressed?
@@ -3460,7 +3409,6 @@ loc_34FE:				; XREF: LevSelTextLoad+26j
 loc_3550:
 		move.l	#$6C300003,($C00004).l ; screen	position (sound	test)
 		move.w	($FFFFFF84).w,d0
-		addi.w	#$80,d0
 		move.b	d0,d2
 		lsr.b	#4,d0
 		bsr.w	LevSel_ChgSnd
@@ -3517,7 +3465,14 @@ LevelMenuText:	binclude	"_misc/menutext.bin"
 ; ---------------------------------------------------------------------------
 ; Music	playlist
 ; ---------------------------------------------------------------------------
-MusicList:	binclude	"_misc/muslist1.bin"
+MusicList:
+		dc.b bgm_GHZ	; GHZ
+		dc.b bgm_LZ	; LZ
+		dc.b bgm_MZ	; MZ
+		dc.b bgm_SLZ	; SLZ
+		dc.b bgm_SYZ	; SYZ
+		dc.b bgm_SBZ	; SBZ
+		dc.b bgm_FZ	; Ending		
 		even
 ; ===========================================================================
 
@@ -3530,7 +3485,7 @@ Level:					; XREF: GameModeArray
 		tst.w	($FFFFFFF0).w
 		bmi.s	loc_37B6
 		move.b	#$E0,d0
-		bsr.w	PlaySound_Special ; fade out music
+		jsr	PlaySound_Special ; fade out music
 
 loc_37B6:
 		bsr.w	ClearPLC
@@ -3651,7 +3606,7 @@ Level_BgmNotLZ4:
 Level_PlayBgm:
 		lea	(MusicList).l,a1 ; load	music playlist
 		move.b	(a1,d0.w),d0	; add d0 to a1
-		bsr.w	PlaySound	; play music
+		jsr	PlaySound	; play music
 		move.b	#$34,($FFFFD080).w ; load title	card object
 
 Level_TtlCard:
@@ -4031,7 +3986,7 @@ DynWater_LZ3:				; XREF: DynWater_Index
 		move.l	#Level_LZ3,($FFFFA400).w		; MJ: Set normal version of act 3's layout to be read
 		move.b	#1,($FFFFF64D).w
 		move.w	#$B7,d0
-		bsr.w	PlaySound_Special ; play sound $B7 (rumbling)
+		jsr	PlaySound_Special ; play sound $B7 (rumbling)
 
 loc_3D54:
 		move.w	d1,($FFFFF64A).w
@@ -4625,8 +4580,8 @@ Demo_SS:	binclude	"_demodata/i_ss.bin"
 ; ---------------------------------------------------------------------------
 
 SpecialStage:				; XREF: GameModeArray
-		move.w	#$CA,d0
-		bsr.w	PlaySound_Special ; play special stage entry sound
+		move.w	#sfx_EnterSS,d0
+		jsr	PlaySound_Special ; play special stage entry sound
 		bsr.w	Pal_MakeFlash
 		move	#$2700,sr
 		lea	($C00004).l,a6
@@ -4697,8 +4652,8 @@ SS_ClrNemRam:
 		bsr.w	PalCycle_SS
 		clr.w	($FFFFF780).w	; set stage angle to "upright"
 		move.w	#$40,($FFFFF782).w ; set stage rotation	speed
-		move.w	#$89,d0
-		bsr.w	PlaySound	; play special stage BG	music
+		move.w	#bgm_SS,d0
+		jsr	PlaySound	; play special stage BG	music
 		move.w	#0,($FFFFF790).w
 		lea	(Demo_Index).l,a1
 		moveq	#6,d0
@@ -4797,7 +4752,7 @@ loc_47D4:
 		move.w	($FFFFFE20).w,d0
 		mulu.w	#10,d0		; multiply rings by 10
 		move.w	d0,($FFFFF7D4).w ; set rings bonus
-		move.w	#$8E,d0
+		move.w	#bgm_GotThrough,d0
 		jsr	(PlaySound_Special).l ;	play end-of-level music
 		lea	($FFFFD000).w,a1
 		moveq	#0,d0
@@ -4820,8 +4775,8 @@ SS_NormalExit:
 		beq.s	SS_NormalExit
 		tst.l	($FFFFF680).w
 		bne.s	SS_NormalExit
-		move.w	#$CA,d0
-		bsr.w	PlaySound_Special ; play special stage exit sound
+		move.w	#sfx_EnterSS,d0
+		jsr	PlaySound_Special ; play special stage exit sound
 		bsr.w	Pal_MakeFlash
 		rts	
 ; ===========================================================================
@@ -5154,7 +5109,7 @@ Cont_ClrObjRam:
 		moveq	#$12,d0
 		bsr.w	PalLoad1	; load continue	screen pallet
 		move.b	#$90,d0
-		bsr.w	PlaySound	; play continue	music
+		jsr	PlaySound	; play continue	music
 		move.w	#659,($FFFFF614).w ; set time delay to 11 seconds
 		clr.l	($FFFFF700).w
 		move.l	#$1000000,($FFFFF704).w
@@ -5374,7 +5329,7 @@ Obj81_GetUp:				; XREF: Obj81_Animate
 		clr.w	$14(a0)
 		subq.w	#8,$C(a0)
 		move.b	#$E0,d0
-		bsr.w	PlaySound_Special ; fade out music
+		jsr	PlaySound_Special ; fade out music
 
 Obj81_Run:				; XREF: Obj81_Index
 		cmpi.w	#$800,$14(a0)	; check	Sonic's "run speed" (not moving)
@@ -5406,8 +5361,8 @@ Map_obj80:
 ; ---------------------------------------------------------------------------
 
 EndingSequence:				; XREF: GameModeArray
-		move.b	#$E4,d0
-		bsr.w	PlaySound_Special ; stop music
+		move.b	#bgm_Stop,d0
+		jsr	PlaySound_Special ; stop music
 		bsr.w	Pal_FadeFrom
 		lea	($FFFFD000).w,a1
 		moveq	#0,d0
@@ -5480,8 +5435,8 @@ End_LoadData:
 		bsr.w	KosDec
 		moveq	#3,d0
 		bsr.w	PalLoad1	; load Sonic's pallet
-		move.w	#$8B,d0
-		bsr.w	PlaySound	; play ending sequence music
+		move.w	#bgm_Ending,d0
+		jsr	PlaySound	; play ending sequence music
 		btst	#6,($FFFFF604).w ; is button A pressed?
 		beq.s	End_LoadSonic	; if not, branch
 		move.b	#1,($FFFFFFFA).w ; enable debug	mode
@@ -5540,8 +5495,8 @@ End_MainLoop:
 		cmpi.b	#$18,($FFFFF600).w ; is	scene number $18 (ending)?
 		beq.s	loc_52DA	; if yes, branch
 		move.b	#$1C,($FFFFF600).w ; set scene to $1C (credits)
-		move.b	#$91,d0
-		bsr.w	PlaySound_Special ; play credits music
+		move.b	#bgm_Credits,d0
+		jsr	PlaySound_Special ; play credits music
 		move.w	#0,($FFFFFFF4).w ; set credits index number to 0
 		rts	
 ; ===========================================================================
@@ -8033,8 +7988,8 @@ loc_6EB0:
 		move.w	#$280,$C(a1)
 
 loc_6ED0:
-		move.w	#$8C,d0
-		bsr.w	PlaySound	; play boss music
+		move.w	#bgm_Boss,d0
+		jsr	PlaySound	; play boss music
 		move.b	#1,($FFFFF7AA).w ; lock	screen
 		addq.b	#2,($FFFFF742).w
 		moveq	#$11,d0
@@ -8077,8 +8032,8 @@ Resize_LZ3:
 		cmp.l	#Level_LZ3_WALL,d0			; MJ: is it already set to wall version?
 		beq.s	loc_6F28				; MJ: if so, branch to skip
 		move.l	#Level_LZ3_WALL,($FFFFA400).w		; MJ: Set wall version of act 3's layout to be read
-		move.w	#$B7,d0
-		bsr.w	PlaySound_Special ; play rumbling sound
+		move.w	#sfx_Rumbling,d0
+		jsr	PlaySound_Special ; play rumbling sound
 
 loc_6F28:
 		tst.b	($FFFFF742).w
@@ -8092,8 +8047,8 @@ loc_6F28:
 		move.b	#$77,0(a1)	; load LZ boss object
 
 loc_6F4A:
-		move.w	#$8C,d0
-		bsr.w	PlaySound	; play boss music
+		move.w	#bgm_Boss,d0
+		jsr	PlaySound	; play boss music
 		move.b	#1,($FFFFF7AA).w ; lock	screen
 		addq.b	#2,($FFFFF742).w
 		moveq	#$11,d0
@@ -8253,8 +8208,8 @@ Resize_MZ3boss:
 		move.w	#$22C,$C(a1)
 
 loc_70D0:
-		move.w	#$8C,d0
-		bsr.w	PlaySound	; play boss music
+		move.w	#bgm_Boss,d0
+		jsr	PlaySound	; play boss music
 		move.b	#1,($FFFFF7AA).w ; lock	screen
 		addq.b	#2,($FFFFF742).w
 		moveq	#$11,d0
@@ -8318,8 +8273,8 @@ Resize_SLZ3boss:
 		move.b	#$7A,(a1)	; load SLZ boss	object
 
 loc_7144:
-		move.w	#$8C,d0
-		bsr.w	PlaySound	; play boss music
+		move.w	#bgm_Boss,d0
+		jsr	PlaySound	; play boss music
 		move.b	#1,($FFFFF7AA).w ; lock	screen
 		addq.b	#2,($FFFFF742).w
 		moveq	#$11,d0
@@ -8401,8 +8356,8 @@ Resize_SYZ3boss:
 		addq.b	#2,($FFFFF742).w
 
 loc_71EC:
-		move.w	#$8C,d0
-		bsr.w	PlaySound	; play boss music
+		move.w	#bgm_Boss,d0
+		jsr	PlaySound	; play boss music
 		move.b	#1,($FFFFF7AA).w ; lock	screen
 		moveq	#$11,d0
 		bra.w	LoadPLC		; load boss patterns
@@ -10120,7 +10075,7 @@ loc_84EE:
 
 loc_84F2:
 		bsr.w	DisplaySprite
-		move.w	#$B9,d0
+		move.w	#sfx_Collapse,d0
 		jmp	(PlaySound_Special).l ;	play collapsing	sound
 ; ===========================================================================
 ; ---------------------------------------------------------------------------
@@ -10710,7 +10665,7 @@ Obj24_Main:				; XREF: Obj24_Index
 		move.b	#$C,$19(a0)
 		move.b	#9,$1E(a0)
 		move.b	#0,$1A(a0)
-		move.w	#$A5,d0
+		move.w	#sfx_A5,d0
 		jsr	(PlaySound_Special).l ;	play explosion sound
 
 Obj24_Animate:				; XREF: Obj24_Index
@@ -10758,7 +10713,7 @@ Obj27_Main:				; XREF: Obj27_Index
 		move.b	#$C,$19(a0)
 		move.b	#7,$1E(a0)	; set frame duration to	7 frames
 		move.b	#0,$1A(a0)
-		move.w	#$C1,d0
+		move.w	#sfx_BreakItem,d0
 		jsr	(PlaySound_Special).l ;	play breaking enemy sound
 
 Obj27_Animate:				; XREF: Obj27_Index
@@ -10796,7 +10751,7 @@ Obj3F_Main:				; XREF: Obj3F_Index
 		move.b	#$C,$19(a0)
 		move.b	#7,$1E(a0)
 		move.b	#0,$1A(a0)
-		move.w	#$C4,d0
+		move.w	#sfx_Bomb,d0
 		jmp	(PlaySound_Special).l ;	play exploding bomb sound
 ; ===========================================================================
 Ani_obj1E:
@@ -11891,7 +11846,7 @@ Obj25_Delete:				; XREF: Obj25_Index
 CollectRing:				; XREF: Obj25_Collect
 		addq.w	#1,($FFFFFE20).w ; add 1 to rings
 		ori.b	#1,($FFFFFE1D).w ; update the rings counter
-		move.w	#$B5,d0		; play ring sound
+		move.w	#sfx_Ring,d0		; play ring sound
 		cmpi.w	#100,($FFFFFE20).w ; do	you have < 100 rings?
 		bcs.s	Obj25_PlaySnd	; if yes, branch
 		bset	#1,($FFFFFE1B).w ; update lives	counter
@@ -11904,7 +11859,7 @@ CollectRing:				; XREF: Obj25_Collect
 loc_9CA4:
 		addq.b	#1,($FFFFFE12).w ; add 1 to the	number of lives	you have
 		addq.b	#1,($FFFFFE1C).w ; add 1 to the	lives counter
-		move.w	#$88,d0		; play extra life music
+		move.w	#bgm_ExtraLife,d0		; play extra life music
 
 Obj25_PlaySnd:
 		jmp	(PlaySound_Special).l
@@ -11988,7 +11943,7 @@ Obj37_ResetCounter:			; XREF: Obj37_Loop
 		move.w	#0,($FFFFFE20).w ; reset number	of rings to zero
 		move.b	#$80,($FFFFFE1D).w ; update ring counter
 		move.b	#0,($FFFFFE1B).w
-		move.w	#$C6,d0
+		move.w	#sfx_RingLoss,d0
 		jsr	(PlaySound_Special).l ;	play ring loss sound
 
 Obj37_Bounce:				; XREF: Obj37_Index
@@ -12098,7 +12053,7 @@ Obj4B_Collect:				; XREF: Obj4B_Index
 		bset	#0,1(a1)	; reverse flash	object
 
 Obj4B_PlaySnd:
-		move.w	#$C3,d0
+		move.w	#sfx_GiantRing,d0
 		jsr	(PlaySound_Special).l ;	play giant ring	sound
 		bra.s	Obj4B_Animate
 ; ===========================================================================
@@ -12427,7 +12382,7 @@ Obj2E_ChkSonic:
 ExtraLife:
 		addq.b	#1,($FFFFFE12).w ; add 1 to the	number of lives	you have
 		addq.b	#1,($FFFFFE1C).w ; add 1 to the	lives counter
-		move.w	#$88,d0
+		move.w	#bgm_ExtraLife,d0
 		jmp	(PlaySound).l	; play extra life music
 ; ===========================================================================
 
@@ -12439,7 +12394,7 @@ Obj2E_ChkShoes:
 		move.w	#$C00,($FFFFF760).w ; change Sonic's top speed
 		move.w	#$18,($FFFFF762).w
 		move.w	#$80,($FFFFF764).w
-		move.w	#$E2,d0
+		move.w	#bgm_Speedup,d0
 		jmp	(PlaySound).l	; Speed	up the music
 ; ===========================================================================
 
@@ -12448,7 +12403,7 @@ Obj2E_ChkShield:
 		bne.s	Obj2E_ChkInvinc
 		move.b	#1,($FFFFFE2C).w ; give	Sonic a	shield
 		move.b	#$38,($FFFFD180).w ; load shield object	($38)
-		move.w	#$AF,d0
+		move.w	#sfx_Shield,d0
 		jmp	(PlaySound).l	; play shield sound
 ; ===========================================================================
 
@@ -12467,7 +12422,7 @@ Obj2E_ChkInvinc:
 		move.b	#4,($FFFFD2DC).w
 		tst.b	($FFFFF7AA).w	; is boss mode on?
 		bne.s	Obj2E_NoMusic	; if yes, branch
-		move.w	#$87,d0
+		move.w	#bgm_Invincible,d0
 		jmp	(PlaySound).l	; play invincibility music
 ; ===========================================================================
 
@@ -12490,7 +12445,7 @@ Obj2E_ChkRings:
 		beq.w	ExtraLife
 
 Obj2E_RingSound:
-		move.w	#$B5,d0
+		move.w	#sfx_Ring,d0
 		jmp	(PlaySound).l	; play ring sound
 ; ===========================================================================
 
@@ -13370,7 +13325,7 @@ Obj35_Main:				; XREF: Obj35_Index
 		move.b	#1,$18(a0)
 		move.b	#$8B,$20(a0)
 		move.b	#8,$19(a0)
-		move.w	#$C8,d0
+		move.w	#sfx_Burning,d0
 		jsr	(PlaySound_Special).l ;	play flame sound
 		tst.b	$28(a0)
 		beq.s	loc_B238
@@ -13890,7 +13845,7 @@ loc_B872:
 		bne.s	loc_B892
 		tst.b	1(a0)
 		bpl.s	loc_B892
-		move.w	#$C7,d0
+		move.w	#sfx_ChainRise,d0
 		jsr	(PlaySound_Special).l ;	play rising chain sound
 
 loc_B892:
@@ -13916,7 +13871,7 @@ loc_B8A8:				; XREF: Obj31_Type00
 		move.w	#0,$12(a0)	; stop object falling
 		tst.b	1(a0)
 		bpl.s	Obj31_Restart
-		move.w	#$BD,d0
+		move.w	#sfx_ChainStomp,d0
 		jsr	(PlaySound_Special).l ;	play stomping sound
 
 Obj31_Restart:
@@ -13942,7 +13897,7 @@ loc_B902:
 		bne.s	loc_B91C
 		tst.b	1(a0)
 		bpl.s	loc_B91C
-		move.w	#$C7,d0
+		move.w	#sfx_ChainRise,d0
 		jsr	(PlaySound_Special).l ;	play rising chain sound
 
 loc_B91C:
@@ -13969,7 +13924,7 @@ loc_B938:				; XREF: Obj31_Type01
 		move.w	#$3C,$38(a0)
 		tst.b	1(a0)
 		bpl.s	loc_B97C
-		move.w	#$BD,d0
+		move.w	#sfx_ChainStomp,d0
 		jsr	(PlaySound_Special).l ;	play stomping sound
 
 loc_B97C:
@@ -14235,7 +14190,7 @@ loc_BDBE:
 loc_BDC8:
 		tst.b	(a3)
 		bne.s	loc_BDD6
-		move.w	#$CD,d0
+		move.w	#sfx_Switch,d0
 		jsr	(PlaySound_Special).l ;	play switch sound
 
 loc_BDD6:
@@ -14705,7 +14660,7 @@ loc_C294:
 		move.w	d1,$14(a1)
 		move.w	#0,$10(a1)
 		move.w	d0,-(sp)
-		move.w	#$A7,d0
+		move.w	#sfx_Push,d0
 		jsr	(PlaySound_Special).l ;	play pushing sound
 		move.w	(sp)+,d0
 		tst.b	$28(a0)
@@ -15090,7 +15045,7 @@ Obj3A_RingBonus:
 Obj3A_ChkBonus:
 		tst.w	d0		; is there any bonus?
 		bne.s	Obj3A_AddBonus	; if yes, branch
-		move.w	#$C5,d0
+		move.w	#sfx_Cash,d0
 		jsr	(PlaySound_Special).l ;	play "ker-ching" sound
 		addq.b	#2,$24(a0)
 		cmpi.w	#$501,($FFFFFE10).w
@@ -15109,7 +15064,7 @@ Obj3A_AddBonus:				; XREF: Obj3A_ChkBonus
 		move.b	($FFFFFE0F).w,d0
 		andi.b	#3,d0
 		bne.s	locret_C692
-		move.w	#$CD,d0
+		move.w	#sfx_Switch,d0
 		jmp	(PlaySound_Special).l ;	play "blip" sound
 ; ===========================================================================
 
@@ -15176,7 +15131,7 @@ Obj3A_SBZ2:				; XREF: Obj3A_ChkPos2
 		bne.w	DeleteObject
 		addq.b	#2,$24(a0)
 		clr.b	($FFFFF7CC).w	; unlock controls
-		move.w	#$8D,d0
+		move.w	#bgm_FZ,d0
 		jmp	(PlaySound).l	; play FZ music
 ; ===========================================================================
 
@@ -15314,12 +15269,12 @@ Obj7E_RingBonus:			; XREF: Obj7E_Index
 		move.b	($FFFFFE0F).w,d0
 		andi.b	#3,d0
 		bne.s	locret_C8EA
-		move.w	#$CD,d0
+		move.w	#sfx_Switch,d0
 		jmp	(PlaySound_Special).l ;	play "blip" sound
 ; ===========================================================================
 
 loc_C8C4:				; XREF: Obj7E_RingBonus
-		move.w	#$C5,d0
+		move.w	#sfx_Cash,d0
 		jsr	(PlaySound_Special).l ;	play "ker-ching" sound
 		addq.b	#2,$24(a0)
 		move.w	#180,$1E(a0)	; set time delay to 3 seconds
@@ -15340,7 +15295,7 @@ Obj7E_Exit:				; XREF: Obj7E_Index
 Obj7E_Continue:				; XREF: Obj7E_Index
 		move.b	#4,($FFFFD6DA).w
 		move.b	#$14,($FFFFD6E4).w
-		move.w	#$BF,d0
+		move.w	#sfx_Continue,d0
 		jsr	(PlaySound_Special).l ;	play continues music
 		addq.b	#2,$24(a0)
 		move.w	#360,$1E(a0)	; set time delay to 6 seconds
@@ -15835,7 +15790,7 @@ Obj36_Wait:
 		bne.s	locret_CFE6
 		tst.b	1(a0)
 		bpl.s	locret_CFE6
-		move.w	#$B6,d0
+		move.w	#sfx_SpikesMove,d0
 		jsr	(PlaySound_Special).l ;	play "spikes moving" sound
 		bra.s	locret_CFE6
 ; ===========================================================================
@@ -15930,7 +15885,7 @@ Obj49_PlaySnd:				; XREF: Obj49_Index
 		move.b	($FFFFFE0F).w,d0
 		andi.b	#$3F,d0
 		bne.s	Obj49_ChkDel
-		move.w	#$D0,d0
+		move.w	#sfx_Waterfall,d0
 		jsr	(PlaySound_Special).l ;	play waterfall sound
 
 Obj49_ChkDel:
@@ -16076,7 +16031,7 @@ loc_D268:
 		dbf	d1,Smash_Loop
 
 Smash_PlaySnd:
-		move.w	#$CB,d0
+		move.w	#sfx_WallSmash,d0
 		jmp	(PlaySound_Special).l ;	play smashing sound
 ; End of function SmashObject
 
@@ -16972,7 +16927,7 @@ Obj41_BounceUp:				; XREF: Obj41_Up
 		move.b	#2,$24(a1)
 		bclr	#3,$22(a0)
 		clr.b	$25(a0)
-		move.w	#$CC,d0
+		move.w	#sfx_Spring,d0
 		jsr	(PlaySound_Special).l ;	play spring sound
 
 Obj41_AniUp:				; XREF: Obj41_Index
@@ -17022,7 +16977,7 @@ loc_DC36:
 loc_DC56:
 		bclr	#5,$22(a0)
 		bclr	#5,$22(a1)
-		move.w	#$CC,d0
+		move.w	#sfx_Spring,d0
 		jsr	(PlaySound_Special).l ;	play spring sound
 
 Obj41_AniLR:				; XREF: Obj41_Index
@@ -17066,7 +17021,7 @@ Obj41_BounceDwn:			; XREF: Obj41_Dwn
 		move.b	#2,$24(a1)
 		bclr	#3,$22(a0)
 		clr.b	$25(a0)
-		move.w	#$CC,d0
+		move.w	#sfx_Spring,d0
 		jsr	(PlaySound_Special).l ;	play spring sound
 
 Obj41_AniDwn:				; XREF: Obj41_Index
@@ -17582,7 +17537,7 @@ Obj14_SetSpeed:
 		move.w	#0,$12(a0)	; delete vertical speed
 
 Obj14_PlaySnd:
-		move.w	#$AE,d0
+		move.w	#sfx_Fireball,d0
 		jsr	(PlaySound_Special).l ;	play lava ball sound
 
 Obj14_Action:				; XREF: Obj14_Index
@@ -17743,7 +17698,7 @@ Obj6D_Action:				; XREF: Obj6D_Index
 		bchg	#0,$1C(a0)
 		beq.s	loc_E57A
 		move.w	$32(a0),$30(a0)	; begin	flaming	time
-		move.w	#$B3,d0
+		move.w	#sfx_Flamethrower,d0
 		jsr	(PlaySound_Special).l ;	play flame sound
 
 loc_E57A:
@@ -17996,7 +17951,7 @@ Obj47_Hit:				; XREF: Obj47_Index
 		bclr	#5,$22(a1)
 		clr.b	$3C(a1)
 		move.b	#1,$1C(a0)
-		move.w	#$B4,d0
+		move.w	#sfx_Bumper,d0
 		jsr	(PlaySound_Special).l ;	play bumper sound
 		lea	($FFFFFC00).w,a2
 		moveq	#0,d0
@@ -18093,7 +18048,7 @@ Obj0D_Touch:				; XREF: Obj0D_Index
 		bcs.s	locret_EBBA
 		cmpi.w	#$20,d0		; is Sonic within $20 pixels of	the signpost?
 		bcc.s	locret_EBBA	; if not, branch
-		move.w	#$CF,d0
+		move.w	#sfx_Signpost,d0
 		jsr	(PlaySound).l	; play signpost	sound
 		clr.b	($FFFFFE1E).w	; stop time counter
 		move.w	($FFFFF72A).w,($FFFFF728).w ; lock screen position
@@ -18207,7 +18162,7 @@ loc_ECD0:
 		move.w	($FFFFFE20).w,d0 ; load	number of rings
 		mulu.w	#10,d0		; multiply by 10
 		move.w	d0,($FFFFF7D4).w ; set ring bonus
-		move.w	#$8E,d0
+		move.w	#bgm_GotThrough,d0
 		jsr	(PlaySound_Special).l ;	play "Sonic got	through" music
 
 locret_ECEE:
@@ -18406,7 +18361,7 @@ loc_EF10:				; XREF: Obj4D_Main
 		move.b	#0,$28(a0)
 
 Obj4D_PlaySnd:
-		move.w	#$C8,d0
+		move.w	#sfx_Burning,d0
 		jsr	(PlaySound_Special).l ;	play flame sound
 
 Obj4D_Action:				; XREF: Obj4D_Index
@@ -19744,7 +19699,7 @@ Obj55_PlaySnd:				; XREF: Obj55_Index2
 		move.b	($FFFFFE0F).w,d0
 		andi.b	#$F,d0
 		bne.s	loc_101A0
-		move.w	#$C0,d0
+		move.w	#sfx_Basaran,d0
 		jsr	(PlaySound_Special).l ;	play flapping sound
 
 loc_101A0:
@@ -21404,7 +21359,7 @@ Obj0C_OpenClose:			; XREF: Obj0C_Index
 		bchg	#0,$1C(a0)	; open/close door
 		tst.b	1(a0)
 		bpl.s	Obj0C_Solid
-		move.w	#$BB,d0
+		move.w	#sfx_Door,d0
 		jsr	(PlaySound_Special).l ;	play door sound
 
 Obj0C_Solid:
@@ -21868,7 +21823,7 @@ Obj5E_Spring:
 		clr.b	$3C(a2)
 		move.b	#$10,$1C(a2)	; change Sonic's animation to "spring" ($10)
 		move.b	#2,$24(a2)
-		move.w	#$CC,d0
+		move.w	#sfx_Spring,d0
 		jsr	(PlaySound_Special).l ;	play spring sound
 
 loc_1192C:
@@ -22642,7 +22597,7 @@ Obj62_FireBall:				; XREF: Obj62_Index
 		neg.w	$10(a0)
 
 Obj62_Sound:
-		move.w	#$AE,d0
+		move.w	#sfx_Fireball,d0
 		jsr	(PlaySound_Special).l ;	play lava ball sound
 
 Obj62_AniFire:				; XREF: Obj62_Index
@@ -23050,7 +23005,7 @@ Obj64_Wobble:				; XREF: Obj64_ChkWater
 		beq.s	Obj64_Display	; if not, branch
 
 		bsr.w	ResumeMusic	; cancel countdown music
-		move.w	#$AD,d0
+		move.w	#sfx_Bubble,d0
 		jsr	(PlaySound_Special).l ;	play collecting	bubble sound
 		lea	($FFFFD000).w,a1
 		clr.w	$10(a1)
@@ -23408,7 +23363,13 @@ Obj01_Modes:	dc.w Obj01_MdNormal-Obj01_Modes
 ; ---------------------------------------------------------------------------
 ; Music	to play	after invincibility wears off
 ; ---------------------------------------------------------------------------
-MusicList2:	binclude	"_misc/muslist2.bin"
+MusicList2:
+		dc.b bgm_GHZ	
+		dc.b bgm_LZ
+		dc.b bgm_MZ
+		dc.b bgm_SLZ
+		dc.b bgm_SYZ
+		dc.b bgm_SBZ
 		even
 ; ===========================================================================
 
@@ -23458,7 +23419,7 @@ Obj01_ChkShoes:
 		move.w	#$C,($FFFFF762).w ; restore Sonic's acceleration
 		move.w	#$80,($FFFFF764).w ; restore Sonic's deceleration
 		move.b	#0,($FFFFFE2E).w ; cancel speed	shoes
-		move.w	#$E3,d0
+		move.w	#bgm_Slowdown,d0
 		jmp	(PlaySound).l	; run music at normal speed
 ; ===========================================================================
 
@@ -23514,7 +23475,7 @@ Obj01_InWater:
 		asr	$12(a0)
 		beq.s	locret_12D80
 		move.b	#8,($FFFFD300).w ; load	splash object
-		move.w	#$AA,d0
+		move.w	#sfx_Splash,d0
 		jmp	(PlaySound_Special).l ;	play splash sound
 ; ===========================================================================
 
@@ -23533,7 +23494,7 @@ Obj01_OutWater:
 		move.w	#-$1000,$12(a0)	; set maximum speed on leaving water
 
 loc_12E0E:
-		move.w	#$AA,d0
+		move.w	#sfx_Splash,d0
 		jmp	(PlaySound_Special).l ;	play splash sound
 ; End of function Sonic_Water
 
@@ -23831,7 +23792,7 @@ loc_130BA:
 		blt.s	locret_130E8
 		move.b	#$D,$1C(a0)	; use "stopping" animation
 		bclr	#0,$22(a0)
-		move.w	#$A4,d0
+		move.w	#sfx_Skid,d0
 		jsr	(PlaySound_Special).l ;	play stopping sound
 
 locret_130E8:
@@ -23877,7 +23838,7 @@ loc_13120:
 		bgt.s	locret_1314E
 		move.b	#$D,$1C(a0)	; use "stopping" animation
 		bset	#0,$22(a0)
-		move.w	#$A4,d0
+		move.w	#sfx_Skid,d0
 		jsr	(PlaySound_Special).l ;	play stopping sound
 
 locret_1314E:
@@ -24196,7 +24157,7 @@ Obj01_DoRoll:
 		move.b	#7,$17(a0)
 		move.b	#2,$1C(a0)	; use "rolling"	animation
 		addq.w	#5,$C(a0)
-		move.w	#$BE,d0
+		move.w	#sfx_Roll,d0
 		jsr	(PlaySound_Special).l ;	play rolling sound
 		tst.w	$14(a0)
 		bne.s	locret_133E8
@@ -24244,7 +24205,7 @@ loc_1341C:
 		addq.l	#4,sp
 		move.b	#1,$3C(a0)
 		clr.b	$38(a0)
-		move.w	#$A0,d0
+		move.w	#sfx_Jump,d0
 		jsr	(PlaySound_Special).l ;	play jumping sound
 		move.b	#$13,$16(a0)
 		move.b	#9,$17(a0)
@@ -24759,7 +24720,7 @@ GameOver:				; XREF: Obj01_Death
 		clr.b	($FFFFFE1A).w
 
 loc_138C2:
-		move.w	#$8F,d0
+		move.w	#bgm_GameOver,d0
 		jsr	(PlaySound).l	; play game over music
 		moveq	#3,d0
 		jmp	(LoadPLC).l	; load game over patterns
@@ -25289,7 +25250,7 @@ Obj0A_Countdown:			; XREF: Obj0A_Index
 		cmpi.w	#$C,d0
 		bhi.s	Obj0A_ReduceAir	; if air is above $C, branch
 		bne.s	loc_13F02
-		move.w	#$92,d0
+		move.w	#bgm_Drowning,d0
 		jsr	(PlaySound).l	; play countdown music
 
 loc_13F02:
@@ -25301,7 +25262,7 @@ loc_13F02:
 ; ===========================================================================
 
 Obj0A_WarnSound:			; XREF: Obj0A_Countdown
-		move.w	#$C2,d0
+		move.w	#sfx_Warning,d0
 		jsr	(PlaySound_Special).l ;	play "ding-ding" warning sound
 
 Obj0A_ReduceAir:
@@ -25309,7 +25270,7 @@ Obj0A_ReduceAir:
 		bcc.w	Obj0A_GoMakeItem ; if air is above 0, branch
 		bsr.w	ResumeMusic
 		move.b	#$81,($FFFFF7C8).w ; lock controls
-		move.w	#$B2,d0
+		move.w	#sfx_Drown,d0
 		jsr	(PlaySound_Special).l ;	play drowning sound
 		move.b	#$A,$34(a0)
 		move.w	#1,$36(a0)
@@ -25427,10 +25388,10 @@ locret_1408C:
 ResumeMusic:				; XREF: Obj64_Wobble; Sonic_Water; Obj0A_ReduceAir
 		cmpi.w	#$C,($FFFFFE14).w
 		bhi.s	loc_140AC
-		move.w	#$82,d0		; play LZ music
+		move.w	#bgm_LZ,d0		; play LZ music
 		cmpi.w	#$103,($FFFFFE10).w ; check if level is	0103 (SBZ3)
 		bne.s	loc_140A6
-		move.w	#$86,d0		; play SBZ music
+		move.w	#bgm_SBZ,d0		; play SBZ music
 
 loc_140A6:
 		jsr	(PlaySound).l
@@ -25597,7 +25558,7 @@ Obj4A_RmvSonic:				; XREF: Obj4A_Index
 		tst.b	($FFFFD000).w
 		beq.s	Obj4A_Display
 		move.b	#0,($FFFFD000).w ; remove Sonic
-		move.w	#$A8,d0
+		move.w	#sfx_SSGoal,d0
 		jsr	(PlaySound_Special).l ;	play Special Stage "GOAL" sound
 
 Obj4A_Display:
@@ -27511,7 +27472,7 @@ Obj69_Trapdoor:				; XREF: Obj69_Index
 		bchg	#0,$1C(a0)
 		tst.b	1(a0)
 		bpl.s	Obj69_Animate
-		move.w	#$BB,d0
+		move.w	#sfx_Door,d0
 		jsr	(PlaySound_Special).l ;	play door sound
 
 Obj69_Animate:
@@ -27677,7 +27638,7 @@ loc_15A46:
 		move.w	($FFFFFE04).w,d0
 		andi.w	#$F,d0
 		bne.s	locret_15A60
-		move.w	#$B0,d0
+		move.w	#sfx_Saw,d0
 		jsr	(PlaySound_Special).l ;	play saw sound
 
 locret_15A60:
@@ -27708,7 +27669,7 @@ loc_15A96:
 		move.b	($FFFFFE64).w,d0
 		cmpi.b	#$18,d0
 		bne.s	locret_15AB0
-		move.w	#$B0,d0
+		move.w	#sfx_Saw,d0
 		jsr	(PlaySound_Special).l ;	play saw sound
 
 locret_15AB0:
@@ -27734,7 +27695,7 @@ Obj6A_Type03:				; XREF: Obj6A_TypeIndex
 		move.w	#$600,$10(a0)	; move object to the right
 		move.b	#$A2,$20(a0)
 		move.b	#2,$1A(a0)
-		move.w	#$B0,d0
+		move.w	#sfx_Saw,d0
 		jsr	(PlaySound_Special).l ;	play saw sound
 
 loc_15B02:
@@ -27774,7 +27735,7 @@ Obj6A_Type04:				; XREF: Obj6A_TypeIndex
 		move.w	#-$600,$10(a0)	; move object to the left
 		move.b	#$A2,$20(a0)
 		move.b	#2,$1A(a0)
-		move.w	#$B0,d0
+		move.w	#sfx_Saw,d0
 		jsr	(PlaySound_Special).l ;	play saw sound
 
 loc_15B74:
@@ -28285,7 +28246,7 @@ Obj6E_Shock:				; XREF: Obj6E_Index
 		move.b	#1,$1C(a0)	; run "shocking" animation
 		tst.b	1(a0)
 		bpl.s	Obj6E_Animate
-		move.w	#$B1,d0
+		move.w	#sfx_Electric,d0
 		jsr	(PlaySound_Special).l ;	play electricity sound
 
 Obj6E_Animate:
@@ -28693,7 +28654,7 @@ loc_1670E:
 		move.w	8(a0),8(a1)
 		move.w	$C(a0),$C(a1)
 		clr.b	$32(a0)
-		move.w	#$BE,d0
+		move.w	#sfx_Roll,d0
 		jsr	(PlaySound_Special).l ;	play Sonic rolling sound
 
 locret_1675C:
@@ -28713,7 +28674,7 @@ loc_1675E:				; XREF: Obj72_Index
 		bne.s	locret_16796
 		bsr.w	sub_1681C
 		addq.b	#2,$24(a0)
-		move.w	#$BC,d0
+		move.w	#sfx_Teleport,d0
 		jsr	(PlaySound_Special).l ;	play teleport sound
 
 locret_16796:
@@ -29281,7 +29242,7 @@ Obj79_HitLamp:
 		addi.w	#$40,d0
 		cmpi.w	#$68,d0
 		bcc.s	locret_16F90
-		move.w	#$A1,d0
+		move.w	#sfx_Lamppost,d0
 		jsr	(PlaySound_Special).l ;	play lamppost sound
 		addq.b	#2,$24(a0)
 		jsr	SingleObjLoad
@@ -29458,7 +29419,7 @@ Obj7D_Main:				; XREF: Obj7D_Index
 		move.b	#$10,$19(a0)
 		move.b	$28(a0),$1A(a0)
 		move.w	#119,$30(a0)	; set display time to 2	seconds
-		move.w	#$C9,d0
+		move.w	#sfx_Bonus,d0
 		jsr	(PlaySound_Special).l ;	play bonus sound
 		moveq	#0,d0
 		move.b	$28(a0),d0
@@ -29656,7 +29617,7 @@ loc_177E6:
 		tst.b	$3E(a0)
 		bne.s	Obj3D_ShipFlash
 		move.b	#$20,$3E(a0)	; set number of	times for ship to flash
-		move.w	#$AC,d0
+		move.w	#sfx_HitBoss,d0
 		jsr	(PlaySound_Special).l ;	play boss damage sound
 
 Obj3D_ShipFlash:
@@ -29849,7 +29810,7 @@ loc_179DA:
 
 loc_179E0:
 		clr.w	$12(a0)
-		move.w	#$81,d0
+		move.w	#bgm_GHZ,d0
 		jsr	(PlaySound).l	; play GHZ music
 
 loc_179EE:
@@ -30245,7 +30206,7 @@ loc_17F48:
 		tst.b	$3E(a0)
 		bne.s	loc_17F70
 		move.b	#$20,$3E(a0)
-		move.w	#$AC,d0
+		move.w	#sfx_HitBoss,d0
 		jsr	(PlaySound_Special).l
 
 loc_17F70:
@@ -30419,7 +30380,7 @@ loc_180F6:				; XREF: Obj77_ShipIndex
 		move.b	#$32,$3C(a0)
 
 loc_18112:
-		move.w	#$82,d0
+		move.w	#bgm_LZ,d0
 		jsr	(PlaySound).l	; play LZ music
 		bset	#0,$22(a0)
 		addq.b	#2,$25(a0)
@@ -30647,7 +30608,7 @@ loc_1833E:
 		tst.b	$3E(a0)
 		bne.s	loc_18374
 		move.b	#$28,$3E(a0)
-		move.w	#$AC,d0
+		move.w	#sfx_HitBoss,d0
 		jsr	(PlaySound_Special).l ;	play boss damage sound
 
 loc_18374:
@@ -30849,7 +30810,7 @@ loc_18566:
 
 loc_1856C:
 		clr.w	$12(a0)
-		move.w	#$83,d0
+		move.w	#bgm_MZ,d0
 		jsr	(PlaySound).l	; play MZ music
 
 loc_1857A:
@@ -31022,7 +30983,7 @@ Obj74_Main:				; XREF: Obj74_Index
 
 loc_1870A:
 		move.b	#$1E,$29(a0)
-		move.w	#$AE,d0
+		move.w	#sfx_Fireball,d0
 		jsr	(PlaySound_Special).l ;	play lava sound
 
 Obj74_Action:				; XREF: Obj74_Index
@@ -31320,7 +31281,7 @@ loc_189FE:
 		tst.b	$3E(a0)
 		bne.s	loc_18A28
 		move.b	#$20,$3E(a0)
-		move.w	#$AC,d0
+		move.w	#sfx_HitBoss,d0
 		jsr	(PlaySound_Special).l ;	play boss damage sound
 
 loc_18A28:
@@ -31497,7 +31458,7 @@ loc_18BAE:
 
 loc_18BB4:
 		clr.w	$12(a0)
-		move.w	#$84,d0
+		move.w	#bgm_SLZ,d0
 		jsr	(PlaySound).l	; play SLZ music
 
 loc_18BC2:
@@ -31898,7 +31859,7 @@ loc_18FDC:
 		jsr	Obj01_ChkRoll
 		movea.l	(sp)+,a0
 		move.b	#2,$24(a2)
-		move.w	#$CC,d0
+		move.w	#sfx_Spring,d0
 		jsr	(PlaySound_Special).l ;	play "spring" sound
 
 loc_19008:
@@ -32081,7 +32042,7 @@ loc_19202:
 		tst.b	$3E(a0)
 		bne.s	loc_1923A
 		move.b	#$20,$3E(a0)
-		move.w	#$AC,d0
+		move.w	#sfx_HitBoss,d0
 		jsr	(PlaySound_Special).l ;	play boss damage sound
 
 loc_1923A:
@@ -32392,7 +32353,7 @@ loc_194DA:
 
 loc_194E0:
 		clr.w	$12(a0)
-		move.w	#$85,d0
+		move.w	#bgm_SYZ,d0
 		jsr	(PlaySound).l	; play SYZ music
 
 loc_194EE:
@@ -32721,7 +32682,7 @@ loc_197AA:
 		dbf	d1,Obj76_LoopFrag ; repeat sequence 3 more times
 
 loc_197D4:
-		move.w	#$CB,d0
+		move.w	#sfx_WallSmash,d0
 		jmp	(PlaySound_Special).l ;	play smashing sound
 ; End of function Obj76_Break
 
@@ -33064,7 +33025,7 @@ loc_19CC4:
 		dbf	d1,Obj83_LoopFrag ; repeat sequence 3 more times
 
 Obj83_BreakSnd:
-		move.w	#$CB,d0
+		move.w	#sfx_WallSmash,d0
 		jsr	(PlaySound_Special).l ;	play smashing sound
 		jmp	DisplaySprite
 ; ===========================================================================
@@ -33231,7 +33192,7 @@ loc_19EC6:
 		move.w	#0,$30(a1)
 		move.w	#1,$32(a0)
 		clr.b	$35(a0)
-		move.w	#$B7,d0
+		move.w	#sfx_Rumbling,d0
 		jsr	(PlaySound_Special).l ;	play rumbling sound
 
 loc_19F10:
@@ -33273,7 +33234,7 @@ loc_19F6A:
 		bne.s	loc_19F88
 		subq.b	#1,$21(a0)
 		move.b	#$64,$35(a0)
-		move.w	#$AC,d0
+		move.w	#sfx_HitBoss,d0
 		jsr	(PlaySound_Special).l ;	play boss damage sound
 
 loc_19F88:
@@ -33338,7 +33299,7 @@ locret_1A01E:
 ; ===========================================================================
 
 loc_1A020:
-		move.w	#$B1,d0
+		move.w	#sfx_Electric,d0
 		jmp	(PlaySound_Special).l ;	play electricity sound
 ; ===========================================================================
 
@@ -33482,7 +33443,7 @@ loc_1A1D4:				; XREF: off_19E80
 		tst.b	$20(a0)
 		bne.s	loc_1A216
 		move.w	#$1E,$30(a0)
-		move.w	#$AC,d0
+		move.w	#sfx_HitBoss,d0
 		jsr	(PlaySound_Special).l ;	play boss damage sound
 
 loc_1A1FC:
@@ -34586,12 +34547,12 @@ Hurt_ChkSpikes:
 		move.w	#0,$14(a0)
 		move.b	#$1A,$1C(a0)
 		move.w	#$78,$30(a0)
-		move.w	#$A3,d0		; load normal damage sound
+		move.w	#sfx_Death,d0		; load normal damage sound
 		cmpi.b	#$36,(a2)	; was damage caused by spikes?
 		bne.s	Hurt_Sound	; if not, branch
 		cmpi.b	#$16,(a2)	; was damage caused by LZ harpoon?
 		bne.s	Hurt_Sound	; if not, branch
-		move.w	#$A6,d0		; load spikes damage sound
+		move.w	#sfx_HitSpikes,d0		; load spikes damage sound
 
 Hurt_Sound:
 		jsr	(PlaySound_Special).l
@@ -34624,10 +34585,10 @@ KillSonic:
 		move.w	$C(a0),$38(a0)
 		move.b	#$18,$1C(a0)
 		bset	#7,2(a0)
-		move.w	#$A3,d0		; play normal death sound
+		move.w	#sfx_Death,d0		; play normal death sound
 		cmpi.b	#$36,(a2)	; check	if you were killed by spikes
 		bne.s	Kill_Sound
-		move.w	#$A6,d0		; play spikes death sound
+		move.w	#sfx_HitSpikes,d0		; play spikes death sound
 
 Kill_Sound:
 		jsr	(PlaySound_Special).l
@@ -35111,7 +35072,7 @@ SS_AniEmeraldSparks:			; XREF: SS_AniIndex
 		clr.l	(a0)
 		clr.l	4(a0)
 		move.b	#4,($FFFFD024).w
-		move.w	#$A8,d0
+		move.w	#sfx_SSGoal,d0
 		jsr	(PlaySound_Special).l ;	play special stage GOAL	sound
 
 locret_1B60C:
@@ -35510,7 +35471,7 @@ Obj09_Jump:				; XREF: Obj09_OnWall
 		asr.l	#8,d0
 		move.w	d0,$12(a0)
 		bset	#1,$22(a0)
-		move.w	#$A0,d0
+		move.w	#sfx_Jump,d0
 		jsr	(PlaySound_Special).l ;	play jumping sound
 
 Obj09_NoJump:
@@ -35763,7 +35724,7 @@ Obj09_GetCont:
 		bset	#0,($FFFFFE1B).w
 		bne.s	Obj09_NoCont
 		addq.b	#1,($FFFFFE18).w ; add 1 to number of continues
-		move.w	#$BF,d0
+		move.w	#sfx_Continue,d0
 		jsr	(PlaySound).l	; play extra continue sound
 
 Obj09_NoCont:
@@ -35782,7 +35743,7 @@ Obj09_Chk1Up:
 Obj09_Get1Up:
 		addq.b	#1,($FFFFFE12).w ; add 1 to number of lives
 		addq.b	#1,($FFFFFE1C).w ; add 1 to lives counter
-		move.w	#$88,d0
+		move.w	#bgm_ExtraLife,d0
 		jsr	(PlaySound).l	; play extra life music
 		moveq	#0,d4
 		rts	
@@ -35809,7 +35770,7 @@ Obj09_GetEmer:
 		addq.b	#1,($FFFFFE57).w ; add 1 to number of emeralds
 
 Obj09_NoEmer:
-		move.w	#$93,d0
+		move.w	#bgm_Emerald,d0
 		jsr	(PlaySound_Special).l ;	play emerald music
 		moveq	#0,d4
 		rts	
@@ -35910,7 +35871,7 @@ Obj09_ChkBumper:
 		move.l	d0,4(a2)
 
 Obj09_BumpSnd:
-		move.w	#$B4,d0
+		move.w	#sfx_Bumper,d0
 		jmp	(PlaySound_Special).l ;	play bumper sound
 ; ===========================================================================
 
@@ -35918,7 +35879,7 @@ Obj09_GOAL:
 		cmpi.b	#$27,d0		; is the item a	"GOAL"?
 		bne.s	Obj09_UPblock
 		addq.b	#2,$24(a0)	; run routine "Obj09_ExitStage"
-		move.w	#$A8,d0		; change item
+		move.w	#sfx_SSGoal,d0		; change item
 		jsr	(PlaySound_Special).l ;	play "GOAL" sound
 		rts	
 ; ===========================================================================
@@ -35937,7 +35898,7 @@ Obj09_UPblock:
 		move.b	#$2A,(a1)	; change item to a "DOWN" block
 
 Obj09_UPsnd:
-		move.w	#$A9,d0
+		move.w	#sfx_SSItem,d0
 		jmp	(PlaySound_Special).l ;	play up/down sound
 ; ===========================================================================
 
@@ -35955,7 +35916,7 @@ Obj09_DOWNblock:
 		move.b	#$29,(a1)	; change item to an "UP" block
 
 Obj09_DOWNsnd:
-		move.w	#$A9,d0
+		move.w	#sfx_SSItem,d0
 		jmp	(PlaySound_Special).l ;	play up/down sound
 ; ===========================================================================
 
@@ -35974,7 +35935,7 @@ Obj09_Rblock:
 
 Obj09_RevStage:
 		neg.w	($FFFFF782).w	; reverse stage	rotation
-		move.w	#$A9,d0
+		move.w	#sfx_SSItem,d0
 		jmp	(PlaySound_Special).l ;	play sound
 ; ===========================================================================
 
@@ -36005,7 +35966,7 @@ Obj09_GlassUpdate:
 		move.b	d0,4(a2)	; update the stage layout
 
 Obj09_GlassSnd:
-		move.w	#$BA,d0
+		move.w	#sfx_SSGlass,d0
 		jmp	(PlaySound_Special).l ;	play glass block sound
 ; ===========================================================================
 
@@ -38470,7 +38431,8 @@ ObjPos_End:	binclude	"_level-data/object-positions/ending.bin"
 ObjPos_Null:	dc.b $FF, $FF, 0, 0, 0,	0
 ; ---------------------------------------------------------------------------
 
-    include "SoundDriver.asm"
+   include "Sonic-2-Clone-Driver-v2/engine/Sonic 2 Clone Driver v2.asm"
+	include "Sonic-2-Clone-Driver-v2/engine/Functions.asm"   
 
    include   "_includes-ASM/ErrorHandler.asm"
 
