@@ -2288,14 +2288,16 @@ loc_72E64:				; XREF: loc_72A64
 		move.b	#$F,d1
 		bra.w	sub_7272E
 ; ===========================================================================
-Kos_Z80:	binclude	"sound/z80_1.bin"
-		dc.w ((SegaPCM&$FF)<<8)+((SegaPCM&$FF00)>>8)
-		dc.b $21
-		dc.w (((EndOfRom-SegaPCM)&$FF)<<8)+(((EndOfRom-SegaPCM)&$FF00)>>8)
-		binclude	"sound/z80_2.bin"
-		even
+; ============================ DAC DRIVER ===============================
+; ===========================================================================
+Kos_Z80:	include	"sound/z80.asm"
 
-;Kos_Z80:	include	"sound/z80.asm"
+; ---------------------------------------------------------------------------
+; SMPS2ASM - A collection of macros that make SMPS's bytecode human-readable.
+; ---------------------------------------------------------------------------
+SonicDriverVer = 1 ; Tell SMPS2ASM that we're using Sonic 1's driver.
+		include "sound/_smps2asm_inc.asm"
+
 		
 Music81:	binclude	"sound/MUSIC/music81.bin"
 		even

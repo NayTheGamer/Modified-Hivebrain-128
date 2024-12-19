@@ -1,4 +1,4 @@
- AS V1.42 Beta [Bld 212] - Source File sonic.asm - Page 1 - 12/19/2024 3:29:50
+ AS V1.42 Beta [Bld 212] - Source File sonic.asm - Page 1 - 12/19/2024 3:29:52
 
 
        1/       0 :                     ; /=========================================================================/
@@ -52664,7 +52664,7 @@
    38484/   95BCC :                     
    38485/   95BCC :                     EndOfRom:
    38486/   95BCC :                     		END
- AS V1.42 Beta [Bld 212] - Source File sonic.asm - Page 2 - 12/19/2024 3:29:50
+ AS V1.42 Beta [Bld 212] - Source File sonic.asm - Page 2 - 12/19/2024 3:29:52
 
 
   Symbol Table (* = unused):
@@ -54150,7 +54150,7 @@
  Sound_Play :                 86A04 C |  Sound_notA7 :                86D22 C |
  Sound_notB5 :                86D0E C |  SpecialStage :                4400 C |
  SpeedToPos :                  D3AC C |  StartLocArray :               5F60 C |
- StartOfRom :                     0 C | *TIME :                   "3:29:49" - |
+ StartOfRom :                     0 C | *TIME :                   "3:29:51" - |
 *TRUE :                           1 - |  TimeBonuses :                 EAB4 C |
  TimeOver :                   1C7E8 C |  TitleScreen :                 2CFE C |
  Title_ChkLevSel :             3028 C |  Title_ChkRegion :             2F9C C |
@@ -54189,7 +54189,7 @@
  ZeroDivide.__pos :                                        FFFFFFFFFFFFFFFF - |
 *ZeroDivide.__sp :                0 - |
 *ZeroDivide.__str :                "ZERO DIVIDE                           " - |
-*__global__Art1bpp_Font :     95308 - |
+*__DEBUG__ :                      1 - | *__global__Art1bpp_Font :     95308 - |
 *__global__Console_GetPosAsXY :                                       95A56 - |
 *__global__Console_Init :     959A2 - |
  __global__Console_InitShared :                                       959E6 - |
@@ -55912,10 +55912,10 @@
 *zSample3_Pitch :                EA C |  zWaitDACLoop :                  35 C |
  zYM2612_A0 :                  4000 - |
 
-   6414 symbols
-    278 unused symbols
+   6415 symbols
+    279 unused symbols
 
- AS V1.42 Beta [Bld 212] - Source File sonic.asm - Page 3 - 12/19/2024 3:29:50
+ AS V1.42 Beta [Bld 212] - Source File sonic.asm - Page 3 - 12/19/2024 3:29:52
 
 
   Defined Macros:
@@ -55975,7 +55975,7 @@ writeVRAM                             | zonewarning
 
     102 macros
 
- AS V1.42 Beta [Bld 212] - Source File sonic.asm - Page 4 - 12/19/2024 3:29:50
+ AS V1.42 Beta [Bld 212] - Source File sonic.asm - Page 4 - 12/19/2024 3:29:52
 
 
   Defined Functions:
@@ -55988,7 +55988,7 @@ conv0To256                            | offsetover1byte
 zmake68kBank                          | zmake68kPtr                          
 chkop                                 | notZ80                               
 
- AS V1.42 Beta [Bld 212] - Source File sonic.asm - Page 5 - 12/19/2024 3:29:50
+ AS V1.42 Beta [Bld 212] - Source File sonic.asm - Page 5 - 12/19/2024 3:29:52
 
 
   Code Pages:
@@ -55998,7 +55998,7 @@ STANDARD (0 changed characters)
 
 1 code page
 
-1.60 second assembly time
+1.55 second assembly time
 
   49863 lines source file
   56581 lines incl. macro expansions
